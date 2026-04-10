@@ -49,13 +49,18 @@ python run_e2e.py
 
 ```
 yourmove-server/
+├── .env.example
+├── DEPLOY_KOYEB_STEPS_EN.md
+├── TECHNICAL_DEFENSE_GUIDE_EN.md
 ├── main.py
 ├── simulator.py
 ├── run_e2e.py
 ├── tests/
 │   ├── test_e2e.py
 │   ├── test_unit_ml_classifier.py
-│   └── test_unit_patient_schema.py
+│   ├── test_unit_ml_statistical.py
+│   ├── test_unit_patient_schema.py
+│   └── test_unit_recommendation_service.py
 └── app/
     ├── api/
     ├── core/
