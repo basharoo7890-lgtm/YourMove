@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourMove — مراقبة الجلسة</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content" style="padding:18px 22px;">
+
+        <!-- Top bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;animation:fadeInUp 0.4s ease;">
+            <div style="display:flex;align-items:center;gap:14px;">
+                <a href="/sessions" class="btn btn-sm btn-secondary">← الجلسات</a>
+                <h1 style="font-size:17px;font-weight:600;">جلسة #<span id="session-id">—</span></h1>
+                <span id="patient-name" style="color:var(--cyan);font-weight:500;"></span>
+                <span id="session-status-badge"></span>
+            </div>
+            <div class="connection-status">
+                <span class="connection-dot" id="ws-dot"></span>
+                <span id="ws-status" style="font-size:12px;">غير متصل</span>
+                <span class="mono" style="font-size:12px;color:var(--text-muted);margin-right:14px;" id="elapsed">00:00</span>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="live-grid">
+
+            <!-- LEFT COLUMN: State + PSI + Controls -->
+            <div style="display:flex;flex-direction:column;gap:14px;">
+
+                <!-- State Display -->
+                <div class="card" style="padding:18px;">
+                    <div class="card-title" style="margin-bottom:12px;font-size:12px;">حالة الطفل</div>
+                    <div class="state-display">
+                        <div class="state-circle" id="state-circle" style="background:rgba(16,185,129,0.1);color:var(--calm);">
+                            😊
+                        </div>
+                        <div class="state-label" id="state-label" style="color:var(--calm);">هادئ</div>
+                        <div class="state-confidence" id="state-confidence">الثقة: —%</div>
+                    </div>
+                </div>
+
+                <!-- PSI -->
+                <div class="card" style="padding:18px;">
+                    <div class="card-title" style="margin-bottom:8px;font-size:12px;">مؤشر الاستقرار PSI</div>
+                    <div class="psi-gauge">
+                        <div class="psi-value" id="psi-value" style="color:var(--calm);">—</div>
+                        <div class="psi-label">Patient Stability Index</div>
+                        <div class="psi-bar"><div class="psi-bar-fill" id="psi-bar" style="width:0%"></div></div>
+                    </div>
+                    <div id="psi-components" style="font-size:11px;color:var(--text-muted);margin-top:10px;"></div>
+                </div>
+
+                <!-- Doctor Controls -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-title" style="margin-bottom:12px;font-size:12px;">تحكم الطبيب</div>
+
+                    <div class="slider-group">
+                        <span class="slider-label">السطوع</span>
+                        <input type="range" min="10" max="100" value="60" id="ctrl-brightness" oninput="updateSlider('brightness',this.value)">
+                        <span class="slider-value" id="val-brightness">60</span>
+                    </div>
+                    <div class="slider-group">
+                        <span class="slider-label">الصوت</span>
+                        <input type="range" min="0" max="100" value="50" id="ctrl-volume" oninput="updateSlider('volume',this.value)">
+                        <span class="slider-value" id="val-volume">50</span>
+                    </div>
+                    <div class="slider-group">
+                        <span class="slider-label">الصعوبة</span>
+                        <input type="range" min="1" max="5" value="1" id="ctrl-difficulty" oninput="updateSlider('difficulty',this.value)">
+                        <span class="slider-value" id="val-difficulty">1</span>
+                    </div>
+
+                    <div class="control-grid" style="margin-top:12px;">
+                        <button class="control-btn" onclick="sendCmd('PAUSE_SESSION')"><span class="icon">⏸️</span>إيقاف مؤقت</button>
+                        <button class="control-btn" onclick="sendCmd('RESUME_SESSION')"><span class="icon">▶️</span>استئناف</button>
+                        <button class="control-btn" onclick="sendCmd('TRIGGER_BREAK','30')"><span class="icon">☕</span>استراحة</button>
+                        <button class="control-btn" onclick="sendCmd('TRIGGER_REWARD')"><span class="icon">⭐</span>مكافأة</button>
+                        <button class="control-btn" onclick="sendCmd('CHANGE_AUDIO','calm')"><span class="icon">🎵</span>صوت هادئ</button>
+                        <button class="control-btn danger" onclick="sendCmd('END_SESSION')"><span class="icon">🛑</span>إنهاء الجلسة</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CENTER: Charts -->
+            <div style="display:flex;flex-direction:column;gap:14px;">
+
+                <!-- Movement Chart -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-header" style="margin-bottom:10px;">
+                        <span class="card-title" style="font-size:12px;">مؤشر الحركة (EWMA)</span>
+                        <span class="mono" style="font-size:12px;color:var(--cyan);font-weight:500;" id="movement-val">0.00</span>
+                    </div>
+                    <div class="chart-container" style="height:240px;min-height:240px;"><canvas id="chart-movement"></canvas></div>
+                </div>
+
+                <!-- RT Chart -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-header" style="margin-bottom:10px;">
+                        <span class="card-title" style="font-size:12px;">وقت الاستجابة (ms)</span>
+                        <span class="mono" style="font-size:12px;color:var(--purple-light);font-weight:500;" id="rt-val">—</span>
+                    </div>
+                    <div class="chart-container" style="height:240px;min-height:240px;"><canvas id="chart-rt"></canvas></div>
+                </div>
+
+                <!-- Game Stats -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-title" style="margin-bottom:12px;font-size:12px;">أداء اللعب</div>
+                    <div class="stats-row" style="margin-bottom:0;grid-template-columns:repeat(4,1fr);">
+                        <div class="stat-card" style="padding:12px;text-align:center;">
+                            <div class="stat-value" style="font-size:22px;color:var(--calm);" id="g-correct">0</div>
+                            <div class="stat-label">صحيح</div>
+                        </div>
+                        <div class="stat-card" style="padding:12px;text-align:center;">
+                            <div class="stat-value" style="font-size:22px;color:var(--overwhelmed);" id="g-wrong">0</div>
+                            <div class="stat-label">خطأ</div>
+                        </div>
+                        <div class="stat-card" style="padding:12px;text-align:center;">
+                            <div class="stat-value" style="font-size:22px;color:var(--stressed);" id="g-omissions">0</div>
+                            <div class="stat-label">فائت</div>
+                        </div>
+                        <div class="stat-card" style="padding:12px;text-align:center;">
+                            <div class="stat-value" style="font-size:22px;color:var(--engaged);" id="g-activity">—</div>
+                            <div class="stat-label">اللعبة</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Gaze + Alerts + Motion -->
+            <div style="display:flex;flex-direction:column;gap:14px;">
+
+                <!-- Head Gaze -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-header" style="margin-bottom:8px;">
+                        <span class="card-title" style="font-size:12px;">نظر الرأس Head-Gaze</span>
+                        <span id="gaze-status" style="font-size:11px;"></span>
+                    </div>
+                    <div class="gaze-canvas-wrap">
+                        <canvas id="gaze-canvas" width="280" height="210"></canvas>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--text-muted);">
+                        <span>الزاوية: <span class="mono" id="gaze-angle">—°</span></span>
+                        <span>EWMA: <span class="mono" id="gaze-ewma">—</span></span>
+                    </div>
+                </div>
+
+                <!-- Motion Analysis -->
+                <div class="card" style="padding:16px;">
+                    <div class="card-title" style="margin-bottom:12px;font-size:12px;">تحليل الحركة</div>
+                    <div style="font-size:12px;display:flex;flex-direction:column;gap:8px;" id="motion-stats">
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-glass);"><span style="color:var(--text-muted);">RMS إجمالي</span><span class="mono" id="m-rms">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-glass);"><span style="color:var(--text-muted);">Entropy</span><span class="mono" id="m-entropy">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-glass);"><span style="color:var(--text-muted);">التردد السائد</span><span class="mono" id="m-freq">— Hz</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-glass);"><span style="color:var(--text-muted);">نسبة علوي/سفلي</span><span class="mono" id="m-ratio">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:var(--text-muted);">نمط الحركة</span><span class="mono" id="m-state">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Alerts -->
+                <div class="card" style="padding:16px;flex:1;overflow-y:auto;max-height:260px;">
+                    <div class="card-title" style="margin-bottom:12px;font-size:12px;">التنبيهات</div>
+                    <div id="alerts-feed">
+                        <div class="empty-state" style="padding:20px 10px;">
+                            <div class="icon" style="font-size:24px;opacity:0.3;">📡</div>
+                            <p style="font-size:12px;">في انتظار البيانات...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="/static/js/core.js"></script>
+<script src="/static/js/sidebar.js"></script>
+<script src="/static/js/session.js"></script>
+</body>
+</html>

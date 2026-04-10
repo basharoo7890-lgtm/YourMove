@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f \"=2.0.0\")",
+      "Read(//f/YourMove/app/static/**)"
+    ]
+  }
+}

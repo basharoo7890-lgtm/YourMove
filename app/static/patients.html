@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourMove — المرضى</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">إدارة المرضى</h1>
+                <p class="page-subtitle">إضافة وإدارة ملفات المرضى ومفاتيح الدخول</p>
+            </div>
+            <button class="btn btn-primary" onclick="openAddModal()">➕ إضافة مريض</button>
+        </div>
+
+        <!-- Patients Table -->
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الاسم</th>
+                            <th>العمر</th>
+                            <th>التشخيص</th>
+                            <th>مفتاح الدخول</th>
+                            <th>عدد الجلسات</th>
+                            <th>تاريخ الإضافة</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="patients-table">
+                        <tr><td colspan="7"><div class="loading-overlay"><div class="spinner"></div> جارٍ التحميل...</div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Add/Edit Patient Modal -->
+<div class="modal-overlay" id="patient-modal">
+    <div class="modal">
+        <div class="modal-title" id="modal-title">إضافة مريض جديد</div>
+        <input type="hidden" id="edit-id">
+        <div class="form-group">
+            <label class="form-label">الاسم الكامل</label>
+            <input type="text" id="p-name" class="form-input" placeholder="اسم الطفل">
+        </div>
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">العمر</label>
+                <input type="number" id="p-age" class="form-input" placeholder="8" min="2" max="18">
+            </div>
+            <div class="form-group">
+                <label class="form-label">الجنس</label>
+                <select id="p-gender" class="form-input">
+                    <option value="">—</option>
+                    <option value="male">ذكر</option>
+                    <option value="female">أنثى</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">التشخيص</label>
+            <select id="p-diagnosis" class="form-input">
+                <option value="">—</option>
+                <option value="ASD">ASD — طيف التوحد</option>
+                <option value="ADHD">ADHD — فرط الحركة</option>
+                <option value="ASD+ADHD">ASD + ADHD</option>
+                <option value="Other">أخرى</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">ملاحظات</label>
+            <textarea id="p-notes" class="notes-area" rows="3" placeholder="ملاحظات إضافية..."></textarea>
+        </div>
+        <div id="modal-error" style="color:var(--overwhelmed);font-size:13px;margin-bottom:12px;display:none;border-radius:8px;padding:8px 12px;background:rgba(239,68,68,0.08);"></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+            <button class="btn btn-primary" onclick="savePatient()">حفظ</button>
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<!-- Access Key Modal -->
+<div class="modal-overlay" id="key-modal">
+    <div class="modal" style="text-align:center;">
+        <div class="modal-title">مفتاح الدخول</div>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">استخدم هذا المفتاح في شاشة Login في UE5</p>
+        <div class="access-key" style="display:flex;justify-content:center;font-size:32px;font-weight:700;padding:20px 28px;margin:0 auto 16px;" id="show-key">YM-XXXX</div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">نفس المفتاح = نفس ملف المريض عبر كل الجلسات</p>
+        <div class="modal-actions" style="justify-content:center;">
+            <button class="btn btn-primary" onclick="copyKey()">📋 نسخ المفتاح</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('key-modal').classList.remove('show')">إغلاق</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/core.js"></script>
+<script src="/static/js/sidebar.js"></script>
+<script>
+initPage();
+
+let allPatients = [];
+let allSessions = [];
+
+async function loadPatients() {
+    try {
+        [allPatients, allSessions] = await Promise.all([
+            API.get('/api/patients/'),
+            API.get('/api/sessions/'),
+        ]);
+        renderTable();
+    } catch (e) { console.error(e); }
+}
+
+function renderTable() {
+    const tbody = document.getElementById('patients-table');
+    if (allPatients.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">👶</div><p>لا يوجد مرضى بعد — أضف أول مريض</p></div></td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = allPatients.map((p, i) => {
+        const sessionCount = allSessions.filter(s => s.patient_id === p.id).length;
+        return `<tr style="animation:fadeInUp 0.3s ease ${i * 0.05}s backwards;">
+            <td style="color:var(--text-primary);font-weight:500;">${p.full_name}</td>
+            <td>${p.age} سنة</td>
+            <td>${p.diagnosis ? `<span class="badge badge-engaged">${p.diagnosis}</span>` : '—'}</td>
+            <td>
+                <span class="access-key" style="cursor:pointer;font-size:13px;" onclick="showKey('${p.access_key}')">${p.access_key}</span>
+            </td>
+            <td><span class="mono">${sessionCount}</span></td>
+            <td style="font-size:12px;">${formatDate(p.created_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="editPatient(${p.id})">تعديل</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function openAddModal() {
+    document.getElementById('modal-title').textContent = 'إضافة مريض جديد';
+    document.getElementById('edit-id').value = '';
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-age').value = '';
+    document.getElementById('p-gender').value = '';
+    document.getElementById('p-diagnosis').value = '';
+    document.getElementById('p-notes').value = '';
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('patient-modal').classList.add('show');
+}
+
+function editPatient(id) {
+    const p = allPatients.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('modal-title').textContent = 'تعديل بيانات المريض';
+    document.getElementById('edit-id').value = id;
+    document.getElementById('p-name').value = p.full_name;
+    document.getElementById('p-age').value = p.age;
+    document.getElementById('p-gender').value = p.gender || '';
+    document.getElementById('p-diagnosis').value = p.diagnosis || '';
+    document.getElementById('p-notes').value = p.notes || '';
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('patient-modal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('patient-modal').classList.remove('show');
+}
+
+async function savePatient() {
+    const id = document.getElementById('edit-id').value;
+    const body = {
+        full_name: document.getElementById('p-name').value,
+        age: parseInt(document.getElementById('p-age').value),
+        gender: document.getElementById('p-gender').value || null,
+        diagnosis: document.getElementById('p-diagnosis').value || null,
+        notes: document.getElementById('p-notes').value,
+    };
+
+    if (!body.full_name || !body.age) {
+        document.getElementById('modal-error').textContent = 'الاسم والعمر مطلوبان';
+        document.getElementById('modal-error').style.display = 'block';
+        return;
+    }
+
+    try {
+        if (id) {
+            await API.put(`/api/patients/${id}`, body);
+            showToast('تم تحديث بيانات المريض', 'success');
+        } else {
+            const newP = await API.post('/api/patients/', body);
+            showToast(`تم إضافة المريض — مفتاح الدخول: ${newP.access_key}`, 'success');
+            showKey(newP.access_key);
+        }
+        closeModal();
+        loadPatients();
+    } catch (e) {
+        document.getElementById('modal-error').textContent = e.message;
+        document.getElementById('modal-error').style.display = 'block';
+    }
+}
+
+function showKey(key) {
+    document.getElementById('show-key').textContent = key;
+    document.getElementById('key-modal').classList.add('show');
+}
+
+function copyKey() {
+    const key = document.getElementById('show-key').textContent;
+    navigator.clipboard.writeText(key);
+    showToast('تم نسخ المفتاح', 'success');
+}
+
+loadPatients();
+</script>
+</body>
+</html>

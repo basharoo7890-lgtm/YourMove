@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourMove — الجلسات</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">سجل الجلسات</h1>
+                <p class="page-subtitle">جميع الجلسات السابقة والنشطة</p>
+            </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="stats-row" style="margin-bottom:20px;">
+            <div class="stat-card">
+                <div class="stat-value" id="total-sessions">—</div>
+                <div class="stat-label">إجمالي الجلسات</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-count">—</div>
+                <div class="stat-label">نشطة الآن</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="completed-count">—</div>
+                <div class="stat-label">مكتملة</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>المريض</th>
+                            <th>الحالة</th>
+                            <th>البداية</th>
+                            <th>المدة</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessions-table">
+                        <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div> جارٍ التحميل...</div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="/static/js/core.js"></script>
+<script src="/static/js/sidebar.js"></script>
+<script>
+initPage();
+
+async function load() {
+    try {
+        const [patients, sessions] = await Promise.all([
+            API.get('/api/patients/'),
+            API.get('/api/sessions/'),
+        ]);
+        const pMap = {};
+        patients.forEach(p => pMap[p.id] = p);
+
+        // Stats
+        document.getElementById('total-sessions').textContent = sessions.length;
+        const activeCount = sessions.filter(s => s.status === 'active' || s.status === 'baseline').length;
+        document.getElementById('active-count').textContent = activeCount;
+        document.getElementById('completed-count').textContent = sessions.filter(s => s.status === 'completed').length;
+
+        const tbody = document.getElementById('sessions-table');
+        if (sessions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon" style="opacity:0.3;">📋</div><p>لا توجد جلسات بعد</p></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = sessions.map((s, i) => {
+            const p = pMap[s.patient_id];
+            const isLive = s.status === 'active' || s.status === 'baseline';
+            return `<tr style="animation:fadeInUp 0.3s ease ${i * 0.03}s backwards;">
+                <td class="mono" style="font-size:12px;color:var(--text-muted);">${s.id}</td>
+                <td style="color:var(--text-primary);font-weight:500;">${p ? p.full_name : '#' + s.patient_id}</td>
+                <td>${getStatusBadge(s.status)}</td>
+                <td style="font-size:12px;">${formatDate(s.started_at)}</td>
+                <td class="mono" style="font-size:12px;">${formatDuration(s.started_at, s.ended_at)}</td>
+                <td>
+                    <a href="/session/${s.id}" class="btn btn-sm ${isLive ? 'btn-primary' : 'btn-secondary'}">
+                        ${isLive ? '🔴 مراقبة' : 'عرض'}
+                    </a>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) { console.error(e); }
+}
+
+load();
+</script>
+</body>
+</html>

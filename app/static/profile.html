@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourMove — ملف الطبيب</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content" style="padding:18px 22px;">
+        <div class="card" style="max-width:720px;">
+            <div class="card-header">
+                <h2 class="card-title">ملف الطبيب</h2>
+            </div>
+            <div class="form-group">
+                <label class="form-label">الاسم الكامل</label>
+                <input id="p-name" class="form-input" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">البريد الإلكتروني</label>
+                <input id="p-email" type="email" class="form-input" />
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button class="btn btn-primary" onclick="saveProfile()">حفظ التعديلات</button>
+                <button class="btn btn-secondary" onclick="loadProfile()">إعادة تحميل</button>
+            </div>
+        </div>
+    </main>
+</div>
+<script src="/static/js/core.js"></script>
+<script src="/static/js/sidebar.js"></script>
+<script>
+initPage();
+async function loadProfile() {
+    const me = await API.get('/api/auth/me');
+    document.getElementById('p-name').value = me.full_name || '';
+    document.getElementById('p-email').value = me.email || '';
+}
+async function saveProfile() {
+    const payload = {
+        full_name: document.getElementById('p-name').value.trim(),
+        email: document.getElementById('p-email').value.trim()
+    };
+    await API.put('/api/auth/me', payload);
+    showToast('تم حفظ بيانات الطبيب', 'success');
+}
+loadProfile();
+</script>
+</body>
+</html>
