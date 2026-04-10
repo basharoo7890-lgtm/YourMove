@@ -50,11 +50,11 @@
                     <div class="qa-sub">تسجيل مريض جديد</div>
                 </div>
             </a>
-            <div class="quick-action" style="opacity:0.6;cursor:default;">
+            <div class="quick-action" style="cursor:pointer;" onclick="openStartSessionModal()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openStartSessionModal()">
                 <div class="qa-icon purple">🎮</div>
                 <div>
                     <div class="qa-text">بدء جلسة</div>
-                    <div class="qa-sub">الجلسات تبدأ من UE5</div>
+                    <div class="qa-sub">أدخل مفتاح المريض ثم افتح UE5</div>
                 </div>
             </div>
             <a href="/sessions" class="quick-action">
@@ -95,10 +95,55 @@
     </main>
 </div>
 
+<!-- Start session (access_key only — matches POST /api/sessions/start) -->
+<div class="modal-overlay" id="start-session-modal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-title">بدء جلسة جديدة</div>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">أدخل مفتاح الدخول الخاص بالمريض (نفس المفتاح المعروض في صفحة المرضى).</p>
+        <div class="form-group">
+            <label class="form-label">مفتاح الدخول (access_key)</label>
+            <input type="text" id="start-access-key" class="form-input" placeholder="YM-XXXX" autocomplete="off">
+        </div>
+        <div id="start-session-error" style="color:var(--overwhelmed);font-size:13px;margin-bottom:12px;display:none;border-radius:8px;padding:8px 12px;background:rgba(239,68,68,0.08);"></div>
+        <div class="modal-actions" style="justify-content:flex-end;gap:10px;">
+            <button type="button" class="btn btn-secondary" onclick="closeStartSessionModal()">إلغاء</button>
+            <button type="button" class="btn btn-primary" id="btn-start-session" onclick="submitStartSession()">بدء الجلسة</button>
+        </div>
+    </div>
+</div>
+
 <script src="/static/js/core.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script>
 initPage();
+
+function openStartSessionModal() {
+    document.getElementById('start-session-error').style.display = 'none';
+    document.getElementById('start-access-key').value = '';
+    document.getElementById('start-session-modal').classList.add('show');
+    document.getElementById('start-access-key').focus();
+}
+
+function closeStartSessionModal() {
+    document.getElementById('start-session-modal').classList.remove('show');
+}
+
+async function submitStartSession() {
+    const errEl = document.getElementById('start-session-error');
+    const btn = document.getElementById('btn-start-session');
+    const key = document.getElementById('start-access-key').value;
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    try {
+        const result = await API.startSession(key);
+        window.location.href = '/session/' + result.session_id;
+    } catch (e) {
+        errEl.textContent = e.message || 'تعذر بدء الجلسة';
+        errEl.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+    }
+}
 
 async function loadDashboard() {
     try {
@@ -175,6 +220,10 @@ async function loadDashboard() {
         console.error(e);
     }
 }
+
+document.getElementById('start-access-key').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') submitStartSession();
+});
 
 loadDashboard();
 </script>

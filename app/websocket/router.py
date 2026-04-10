@@ -25,6 +25,24 @@ router = APIRouter()
 logger = logging.getLogger("yourmove.websocket")
 
 
+def _parse_path_session_id(raw: str) -> int | None:
+    """Accept numeric id or UE-style '$15' (often appears as %2415 in URLs) so routing does not 403 before the handler."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if s.startswith("$"):
+        s = s[1:]
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+async def _reject_ws(websocket: WebSocket, *, code: int, reason: str) -> None:
+    await websocket.accept()
+    await websocket.close(code=code, reason=reason)
+
+
 def _extract_ws_token(websocket: WebSocket) -> tuple[str | None, str | None]:
     protocols = websocket.headers.get("sec-websocket-protocol", "")
     for proto in protocols.split(","):
@@ -60,12 +78,17 @@ async def _authenticate_session(websocket: WebSocket, session_id: int) -> tuple[
 
 
 @router.websocket("/ws/ue5/{session_id}")
-async def ws_ue5(websocket: WebSocket, session_id: int):
-    auth = await _authenticate_session(websocket, session_id)
+async def ws_ue5(websocket: WebSocket, session_id: str):
+    sid = _parse_path_session_id(session_id)
+    if sid is None:
+        logger.warning("Invalid WebSocket session id path segment: %r", session_id)
+        await _reject_ws(websocket, code=4400, reason="Invalid session id")
+        return
+    auth = await _authenticate_session(websocket, sid)
     if not auth:
         return
     _, subprotocol = auth
-    await manager.connect_ue5(session_id, websocket, subprotocol=subprotocol)
+    await manager.connect_ue5(sid, websocket, subprotocol=subprotocol)
 
     try:
         while True:
@@ -82,64 +105,69 @@ async def ws_ue5(websocket: WebSocket, session_id: int):
                     repo = TelemetryRepository(db)
                     if msg_type == "game_event":
                         msg = GameEventMessage(**data)
-                        parsed = await process_game_event(session_id, msg, repo)
-                        ml = ml_orchestrator.process_game_event(session_id, msg.data.reaction_time_ms, msg.data.is_baseline)
+                        parsed = await process_game_event(sid, msg, repo)
+                        ml = ml_orchestrator.process_game_event(sid, msg.data.reaction_time_ms, msg.data.is_baseline)
                         if ml.get("classification"):
-                            await repo.create_ml_result(session_id, "classifier", ml["classification"])
-                        await manager.relay_to_dashboard(session_id, {**parsed, "ml": ml})
+                            await repo.create_ml_result(sid, "classifier", ml["classification"])
+                        await manager.relay_to_dashboard(sid, {**parsed, "ml": ml})
                     elif msg_type == "motion_data":
                         msg = MotionDataMessage(**data)
-                        parsed = await process_motion_data(session_id, msg, repo)
+                        parsed = await process_motion_data(sid, msg, repo)
                         ml = ml_orchestrator.process_motion(
-                            session_id,
+                            sid,
                             msg.data.trackers,
                             msg.data.total_movement_index,
                             msg.data.is_baseline,
                         )
                         if ml.get("classification"):
-                            await repo.create_ml_result(session_id, "classifier", ml["classification"])
-                        await manager.relay_to_dashboard(session_id, {**parsed, "ml": ml})
+                            await repo.create_ml_result(sid, "classifier", ml["classification"])
+                        await manager.relay_to_dashboard(sid, {**parsed, "ml": ml})
                     elif msg_type == "head_gaze":
                         msg = HeadGazeMessage(**data)
-                        parsed = await process_head_gaze(session_id, msg, repo)
-                        ml = ml_orchestrator.process_gaze(session_id, msg.data.angle_to_target_degrees)
-                        await manager.relay_to_dashboard(session_id, {**parsed, "ml_gaze": ml})
+                        parsed = await process_head_gaze(sid, msg, repo)
+                        ml = ml_orchestrator.process_gaze(sid, msg.data.angle_to_target_degrees)
+                        await manager.relay_to_dashboard(sid, {**parsed, "ml_gaze": ml})
                     elif msg_type == "session_event":
                         msg = SessionEventMessage(**data)
-                        parsed = await process_session_event(session_id, msg, repo)
+                        parsed = await process_session_event(sid, msg, repo)
                         if msg.event in ("baseline_end", "session_end"):
-                            await repo.persist_ml_state(session_id, ml_orchestrator.snapshot_state(session_id))
+                            await repo.persist_ml_state(sid, ml_orchestrator.snapshot_state(sid))
                         if msg.event == "session_end":
-                            recommendation = await RecommendationService(repo).build_end_session_recommendation(session_id)
-                            await manager.relay_to_dashboard(session_id, recommendation)
-                            ml_orchestrator.cleanup(session_id)
-                        await manager.relay_to_dashboard(session_id, parsed)
+                            recommendation = await RecommendationService(repo).build_end_session_recommendation(sid)
+                            await manager.relay_to_dashboard(sid, recommendation)
+                            ml_orchestrator.cleanup(sid)
+                        await manager.relay_to_dashboard(sid, parsed)
                     else:
                         continue
             except ValidationError as exc:
-                logger.warning("Invalid message for session %s: %s", session_id, exc.error_count())
+                logger.warning("Invalid message for session %s: %s", sid, exc.error_count())
             except Exception:
-                logger.exception("Processing failed for session %s", session_id)
+                logger.exception("Processing failed for session %s", sid)
     except WebSocketDisconnect:
-        manager.disconnect_ue5(session_id)
+        manager.disconnect_ue5(sid)
     finally:
         try:
             async with async_session() as db:
                 repo = TelemetryRepository(db)
-                await repo.persist_ml_state(session_id, ml_orchestrator.snapshot_state(session_id))
+                await repo.persist_ml_state(sid, ml_orchestrator.snapshot_state(sid))
         except Exception:
-            logger.exception("Persist ML state failed for session %s", session_id)
-        await manager.relay_to_dashboard(session_id, {"type": "system", "event": "ue5_disconnected"})
+            logger.exception("Persist ML state failed for session %s", sid)
+        await manager.relay_to_dashboard(sid, {"type": "system", "event": "ue5_disconnected"})
 
 
 @router.websocket("/ws/dashboard/{session_id}")
-async def ws_dashboard(websocket: WebSocket, session_id: int):
-    auth = await _authenticate_session(websocket, session_id)
+async def ws_dashboard(websocket: WebSocket, session_id: str):
+    sid = _parse_path_session_id(session_id)
+    if sid is None:
+        logger.warning("Invalid WebSocket session id path segment: %r", session_id)
+        await _reject_ws(websocket, code=4400, reason="Invalid session id")
+        return
+    auth = await _authenticate_session(websocket, sid)
     if not auth:
         return
     user_id, subprotocol = auth
-    await manager.connect_dashboard(session_id, websocket, subprotocol=subprotocol)
-    await websocket.send_json({"type": "system", "event": "connected", "ue5_connected": manager.is_ue5_connected(session_id)})
+    await manager.connect_dashboard(sid, websocket, subprotocol=subprotocol)
+    await websocket.send_json({"type": "system", "event": "connected", "ue5_connected": manager.is_ue5_connected(sid)})
 
     try:
         while True:
@@ -153,11 +181,11 @@ async def ws_dashboard(websocket: WebSocket, session_id: int):
             cmd = DoctorCommandMessage(**data)
             async with async_session() as db:
                 repo = TelemetryRepository(db)
-                await repo.create_doctor_command(session_id, cmd.command, str(cmd.value or ""))
+                await repo.create_doctor_command(sid, cmd.command, str(cmd.value or ""))
             await manager.send_to_ue5(
-                session_id,
+                sid,
                 {"type": "doctor_command", "command": cmd.command, "value": cmd.value, "doctor_id": cmd.doctor_id or user_id},
             )
     except WebSocketDisconnect:
-        manager.disconnect_dashboard(session_id)
-        await manager.send_to_ue5(session_id, {"type": "system", "event": "dashboard_disconnected"})
+        manager.disconnect_dashboard(sid)
+        await manager.send_to_ue5(sid, {"type": "system", "event": "dashboard_disconnected"})

@@ -2,46 +2,144 @@
 
 const API = {
     base: '',
-    token: localStorage.getItem('ym_token'),
+    /** Primary storage key (legacy) */
+    TOKEN_KEY: 'ym_token',
+    /** Mirror for OAuth2-style clients */
+    ALT_TOKEN_KEY: 'access_token',
 
-    async request(method, path, body = null) {
-        const opts = {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-        };
-        if (this.token) opts.headers['Authorization'] = `Bearer ${this.token}`;
-        if (body) opts.body = JSON.stringify(body);
-
-        const res = await fetch(this.base + path, opts);
-        if (res.status === 401) {
-            localStorage.removeItem('ym_token');
-            window.location.href = '/login';
-            return null;
-        }
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Request failed');
-        return data;
+    getToken() {
+        return localStorage.getItem(this.TOKEN_KEY) || localStorage.getItem(this.ALT_TOKEN_KEY);
     },
-
-    get: (p) => API.request('GET', p),
-    post: (p, b) => API.request('POST', p, b),
-    put: (p, b) => API.request('PUT', p, b),
-    del: (p) => API.request('DELETE', p),
 
     setToken(t) {
-        this.token = t;
-        localStorage.setItem('ym_token', t);
+        if (!t) {
+            this.clearToken();
+            return null;
+        }
+        const v = String(t).trim();
+        localStorage.setItem(this.TOKEN_KEY, v);
+        localStorage.setItem(this.ALT_TOKEN_KEY, v);
+        return v;
     },
 
-    logout() {
-        this.token = null;
-        localStorage.removeItem('ym_token');
-        window.location.href = '/login';
+    clearToken() {
+        localStorage.removeItem(this.TOKEN_KEY);
+        localStorage.removeItem(this.ALT_TOKEN_KEY);
     },
 
     isLoggedIn() {
-        return !!this.token;
-    }
+        return !!this.getToken();
+    },
+
+    _isPublicApiPath(path) {
+        return path === '/api/auth/login' || path === '/api/auth/register';
+    },
+
+    _formatErrorDetail(data) {
+        const d = data && data.detail;
+        if (Array.isArray(d)) {
+            return d.map((e) => (e && e.msg) || JSON.stringify(e)).join('; ');
+        }
+        if (typeof d === 'object' && d !== null) {
+            return JSON.stringify(d);
+        }
+        if (typeof d === 'string' && d.length) return d;
+        return 'Request failed';
+    },
+
+    /**
+     * @param {string} method
+     * @param {string} path
+     * @param {object|null} body
+     * @param {{ auth?: boolean }} [options]
+     */
+    async request(method, path, body = null, options = {}) {
+        const auth = options.auth !== false;
+        const sendAuth = auth && !this._isPublicApiPath(path);
+
+        const opts = { method, headers: {} };
+
+        const hasJsonBody = body !== null && body !== undefined && typeof body === 'object' && !(body instanceof FormData);
+        if (hasJsonBody) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
+
+        if (sendAuth) {
+            const token = this.getToken();
+            if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const res = await fetch(this.base + path, opts);
+
+        const ct = res.headers.get('content-type') || '';
+        let data;
+        if (ct.includes('application/json')) {
+            try {
+                data = await res.json();
+            } catch {
+                data = { detail: res.statusText };
+            }
+        } else {
+            const text = await res.text();
+            data = { detail: text || res.statusText };
+        }
+
+        if (res.status === 401 && sendAuth) {
+            this.clearToken();
+            if (!window.location.pathname.startsWith('/login')) {
+                window.location.href = '/login';
+            }
+            throw new Error(this._formatErrorDetail(data));
+        }
+
+        if (!res.ok) {
+            if (res.status === 429) {
+                const msg = this._formatErrorDetail(data);
+                throw new Error(
+                    msg && msg !== 'Request failed'
+                        ? msg
+                        : 'تم تجاوز الحد المسموح للطلبات — انتظر دقيقة ثم أعد المحاولة'
+                );
+            }
+            throw new Error(this._formatErrorDetail(data));
+        }
+
+        return data;
+    },
+
+    get: (p, o) => API.request('GET', p, null, o),
+    post: (p, b, o) => API.request('POST', p, b, o),
+    put: (p, b, o) => API.request('PUT', p, b, o),
+    del: (p, o) => API.request('DELETE', p, null, o),
+
+    _sessionStartInFlight: false,
+
+    /**
+     * Start a VR session using only the patient's access_key (server expects { access_key }).
+     * Guarded so rapid double-clicks do not trigger rate limiting (429).
+     */
+    async startSession(accessKey) {
+        const key = (accessKey || '').trim();
+        if (!key) throw new Error('مفتاح الدخول (access_key) مطلوب');
+        if (key.length < 5 || key.length > 20) {
+            throw new Error('مفتاح الدخول يجب أن يكون بين 5 و 20 رمزاً (انسخه من صفحة المرضى)');
+        }
+        if (this._sessionStartInFlight) {
+            throw new Error('جاري بدء الجلسة بالفعل');
+        }
+        this._sessionStartInFlight = true;
+        try {
+            return await this.post('/api/sessions/start', { access_key: key });
+        } finally {
+            this._sessionStartInFlight = false;
+        }
+    },
+
+    logout() {
+        this.clearToken();
+        window.location.href = '/login';
+    },
 };
 
 // ─── Auth Guard ───────────────────────────────────────
@@ -83,8 +181,11 @@ function timeAgo(dateStr) {
 function formatDate(dateStr) {
     if (!dateStr) return '—';
     return new Date(dateStr).toLocaleDateString('ar-JO', {
-        year: 'numeric', month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
     });
 }
 
@@ -126,7 +227,7 @@ function getStatusBadge(status) {
 // ─── Sidebar active state ─────────────────────────────
 function initSidebar() {
     const path = window.location.pathname;
-    document.querySelectorAll('.nav-item').forEach(item => {
+    document.querySelectorAll('.nav-item').forEach((item) => {
         if (item.getAttribute('href') === path) {
             item.classList.add('active');
         }
@@ -139,5 +240,7 @@ async function loadUserInfo() {
         const user = await API.get('/api/auth/me');
         const el = document.getElementById('user-name');
         if (el) el.textContent = user.full_name;
-    } catch (e) { /* ignore */ }
+    } catch {
+        /* ignore */
+    }
 }

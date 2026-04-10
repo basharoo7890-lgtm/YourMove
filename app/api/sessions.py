@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.core.database import get_db
@@ -14,12 +14,15 @@ from app.services.recommendation_service import RecommendationService
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
-@router.post("/start", response_model=SessionStartResponse, dependencies=[Depends(rate_limit_session_start)])
+@router.post("/start", response_model=SessionStartResponse)
 async def start_session(
+    request: Request,
     req: SessionStartRequest,
     db: AsyncSession = Depends(get_db),
     user: Therapist = Depends(get_current_user),
 ):
+    # Rate-limit only after JWT succeeds — avoids counting unauthenticated / wrong-token spam (429 after 401 loops).
+    await rate_limit_session_start(request)
     return await SessionService(db).start_session(req.access_key, user.id)
 
 

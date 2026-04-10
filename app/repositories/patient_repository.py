@@ -40,3 +40,11 @@ class PatientRepository:
         await self.db.commit()
         await self.db.refresh(patient)
         return patient
+async def get_by_access_key(self, access_key: str) -> Patient | None:
+        result = await self.db.execute(
+            select(Patient).where(
+                Patient.access_key == access_key,
+                Patient.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()

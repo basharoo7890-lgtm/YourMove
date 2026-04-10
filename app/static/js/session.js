@@ -10,6 +10,7 @@ let startTime = null;
 let alerts = [];
 let wsReconnectAttempts = 0;
 const MAX_RECONNECT_DELAY = 30000; // 30s cap
+const MAX_WS_RECONNECT_ATTEMPTS = 8;
 
 document.getElementById('session-id').textContent = SESSION_ID;
 
@@ -239,9 +240,9 @@ async function loadSession() {
     }
 }
 
-// ─── WebSocket Connection (secure auth via subprotocol) ──
+// ─── WebSocket Connection (token in query — matches server authenticate_ws_token) ──
 function connectWS() {
-    const token = localStorage.getItem('ym_token');
+    const token = typeof API !== 'undefined' && API.getToken ? API.getToken() : localStorage.getItem('ym_token');
     if (!token) {
         showToast('\u063A\u064A\u0631 \u0645\u0633\u062C\u0644 \u0627\u0644\u062F\u062E\u0648\u0644', 'error');
         window.location.href = '/login';
@@ -249,10 +250,16 @@ function connectWS() {
     }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = proto + '://' + location.host + '/ws/dashboard/' + SESSION_ID;
+    const url =
+        proto +
+        '://' +
+        location.host +
+        '/ws/dashboard/' +
+        SESSION_ID +
+        '?token=' +
+        encodeURIComponent(token);
 
-    // Authenticate via Sec-WebSocket-Protocol header (secure — no token in URL)
-    ws = new WebSocket(url, ['access_token.' + token]);
+    ws = new WebSocket(url);
 
     ws.onopen = function() {
         wsReconnectAttempts = 0;
@@ -261,11 +268,22 @@ function connectWS() {
         addAlert('\u062A\u0645 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0627\u0644\u062C\u0644\u0633\u0629', 'success');
     };
 
-    ws.onclose = function() {
+    ws.onclose = function (ev) {
         document.getElementById('ws-dot').className = 'connection-dot offline';
         document.getElementById('ws-status').textContent = '\u063A\u064A\u0631 \u0645\u062A\u0635\u0644';
 
-        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s cap
+        // 4001 = auth failure — do not retry (avoids reconnect storms)
+        if (ev && ev.code === 4001) {
+            addAlert('\u0641\u0634\u0644 \u0627\u0644\u0645\u0635\u0627\u062F\u0642\u0629 \u2014 \u0623\u0639\u062F \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644', 'error');
+            return;
+        }
+
+        if (wsReconnectAttempts >= MAX_WS_RECONNECT_ATTEMPTS) {
+            addAlert('\u062A\u0648\u0642\u0641 \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0639\u062F \u0639\u062F\u0629 \u0645\u062D\u0627\u0648\u0644\u0627\u062A', 'error');
+            return;
+        }
+
+        // Exponential backoff: 1s, 2s, 4s, ... cap 30s
         var delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), MAX_RECONNECT_DELAY);
         wsReconnectAttempts++;
         addAlert('\u0627\u0646\u0642\u0637\u0639 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u2014 \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629 \u062E\u0644\u0627\u0644 ' + Math.round(delay/1000) + '\u062B...', 'warning');
