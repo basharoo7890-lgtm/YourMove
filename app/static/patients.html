@@ -104,7 +104,7 @@
 <script src="/static/js/core.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script>
-initPage();
+const pageReady = initPage();
 
 let allPatients = [];
 let allSessions = [];
@@ -218,7 +218,7 @@ function copyKey() {
     showToast('تم نسخ المفتاح', 'success');
 }
 
-loadPatients();
+if (pageReady) loadPatients();
 </script>
 </body>
 </html>

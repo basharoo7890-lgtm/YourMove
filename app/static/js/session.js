@@ -1,7 +1,5 @@
 /* === YourMove — Live Session Dashboard JS === */
 
-initPage();
-
 // ─── Session State ────────────────────────────────────
 const SESSION_ID = parseInt(window.location.pathname.split('/').pop());
 let ws = null;
@@ -380,6 +378,8 @@ function handleMessage(data) {
     }
 }
 
-// ─── Init ─────────────────────────────────────────────
-loadSession();
-connectWS();
+// ─── Init (only after auth — avoids 401 spam when not logged in) ──
+if (initPage()) {
+    loadSession();
+    connectWS();
+}

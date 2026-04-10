@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.utils import utcnow
+
+if TYPE_CHECKING:
+    from app.models.session import Session
 
 
 class GameActivity(Base):
@@ -27,7 +30,7 @@ class GameActivity(Base):
     score: Mapped[float] = mapped_column(Float, default=0.0)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    session: Mapped["Session"] = relationship(back_populates="activities")
+    session: Mapped[Session] = relationship(back_populates="activities")
 
 
 class GameEvent(Base):
@@ -45,7 +48,7 @@ class GameEvent(Base):
     is_baseline: Mapped[bool] = mapped_column(default=False)
     extra_data: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    session: Mapped["Session"] = relationship(back_populates="game_events")
+    session: Mapped[Session] = relationship(back_populates="game_events")
 
 
 class BodyMotion(Base):
@@ -59,7 +62,7 @@ class BodyMotion(Base):
     tracker_confidence: Mapped[Optional[float]] = mapped_column(Float, default=None)
     is_baseline: Mapped[bool] = mapped_column(default=False)
 
-    session: Mapped["Session"] = relationship(back_populates="body_motion")
+    session: Mapped[Session] = relationship(back_populates="body_motion")
 
 
 class HeadGazeData(Base):
@@ -74,4 +77,4 @@ class HeadGazeData(Base):
     angle_to_target: Mapped[Optional[float]] = mapped_column(Float, default=None)
     is_baseline: Mapped[bool] = mapped_column(default=False)
 
-    session: Mapped["Session"] = relationship(back_populates="head_gaze")
+    session: Mapped[Session] = relationship(back_populates="head_gaze")

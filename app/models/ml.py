@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.utils import utcnow
+
+if TYPE_CHECKING:
+    from app.models.session import Session
 
 
 class MLResult(Base):
@@ -22,7 +25,7 @@ class MLResult(Base):
     features: Mapped[dict] = mapped_column(JSON, default=dict)
     feature_importance: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    session: Mapped["Session"] = relationship(back_populates="ml_results")
+    session: Mapped[Session] = relationship(back_populates="ml_results")
 
 
 class AIReport(Base):
@@ -36,7 +39,7 @@ class AIReport(Base):
     model_used: Mapped[Optional[str]] = mapped_column(String(50), default=None)
     anonymized: Mapped[bool] = mapped_column(default=True)
 
-    session: Mapped["Session"] = relationship(back_populates="ai_reports")
+    session: Mapped[Session] = relationship(back_populates="ai_reports")
 
 
 class BaselineData(Base):
@@ -52,7 +55,7 @@ class BaselineData(Base):
     avg_head_stability: Mapped[Optional[float]] = mapped_column(Float, default=None)
     computed_thresholds: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    session: Mapped["Session"] = relationship(back_populates="baseline_data")
+    session: Mapped[Session] = relationship(back_populates="baseline_data")
 
 
 class DoctorCommand(Base):
@@ -64,7 +67,7 @@ class DoctorCommand(Base):
     value: Mapped[Optional[str]] = mapped_column(String(100), default=None)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
-    session: Mapped["Session"] = relationship(back_populates="doctor_commands")
+    session: Mapped[Session] = relationship(back_populates="doctor_commands")
 
 
 class DoctorNote(Base):
@@ -75,4 +78,4 @@ class DoctorNote(Base):
     note_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
-    session: Mapped["Session"] = relationship(back_populates="doctor_notes")
+    session: Mapped[Session] = relationship(back_populates="doctor_notes")

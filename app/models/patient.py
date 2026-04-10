@@ -3,13 +3,18 @@ from __future__ import annotations
 import secrets
 import string
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.utils import utcnow
+
+if TYPE_CHECKING:
+    from app.models.auth import Therapist
+    from app.models.session import Session
+    from app.models.system import ConsentHistory, LearningStyleData
 
 
 def generate_access_key() -> str:
@@ -32,7 +37,7 @@ class Patient(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
-    therapist: Mapped["Therapist"] = relationship(back_populates="patients")
-    sessions: Mapped[list["Session"]] = relationship(back_populates="patient")
-    consent_history: Mapped[list["ConsentHistory"]] = relationship(back_populates="patient")
-    learning_styles: Mapped[list["LearningStyleData"]] = relationship(back_populates="patient")
+    therapist: Mapped[Therapist] = relationship(back_populates="patients")
+    sessions: Mapped[list[Session]] = relationship(back_populates="patient")
+    consent_history: Mapped[list[ConsentHistory]] = relationship(back_populates="patient")
+    learning_styles: Mapped[list[LearningStyleData]] = relationship(back_populates="patient")

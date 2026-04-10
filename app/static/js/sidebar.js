@@ -40,10 +40,12 @@ function renderSidebar() {
     </aside>`;
 }
 
+/** @returns {boolean} true if user is logged in and shell was rendered */
 function initPage() {
-    if (!requireAuth()) return;
+    if (!requireAuth()) return false;
     const sidebarEl = document.getElementById('sidebar-container');
     if (sidebarEl) sidebarEl.innerHTML = renderSidebar();
     initSidebar();
     loadUserInfo();
+    return true;
 }

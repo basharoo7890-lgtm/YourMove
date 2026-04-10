@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.utils import utcnow
+
+if TYPE_CHECKING:
+    from app.models.patient import Patient
+    from app.models.session import Session
 
 
 class AuditLog(Base):
@@ -32,7 +36,7 @@ class ConsentHistory(Base):
     granted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     notes: Mapped[str] = mapped_column(Text, default="")
 
-    patient: Mapped["Patient"] = relationship(back_populates="consent_history")
+    patient: Mapped[Patient] = relationship(back_populates="consent_history")
 
 
 class ModelVersion(Base):
@@ -59,5 +63,5 @@ class LearningStyleData(Base):
     classification: Mapped[Optional[str]] = mapped_column(String(20), default=None)
     computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
-    patient: Mapped["Patient"] = relationship(back_populates="learning_styles")
-    session: Mapped["Session"] = relationship(back_populates="learning_styles")
+    patient: Mapped[Patient] = relationship(back_populates="learning_styles")
+    session: Mapped[Session] = relationship(back_populates="learning_styles")

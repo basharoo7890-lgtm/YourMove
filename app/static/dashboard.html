@@ -115,7 +115,7 @@
 <script src="/static/js/core.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script>
-initPage();
+const pageReady = initPage();
 
 function openStartSessionModal() {
     document.getElementById('start-session-error').style.display = 'none';
@@ -221,11 +221,15 @@ async function loadDashboard() {
     }
 }
 
-document.getElementById('start-access-key').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') submitStartSession();
-});
-
-loadDashboard();
+if (pageReady) {
+    const startKeyEl = document.getElementById('start-access-key');
+    if (startKeyEl) {
+        startKeyEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') submitStartSession();
+        });
+    }
+    loadDashboard();
+}
 </script>
 </body>
 </html>

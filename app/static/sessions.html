@@ -58,7 +58,7 @@
 <script src="/static/js/core.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script>
-initPage();
+const pageReady = initPage();
 
 async function load() {
     try {
@@ -100,7 +100,7 @@ async function load() {
     } catch (e) { console.error(e); }
 }
 
-load();
+if (pageReady) load();
 </script>
 </body>
 </html>

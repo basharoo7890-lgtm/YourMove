@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.utils import utcnow
+
+if TYPE_CHECKING:
+    from app.models.auth import Therapist
+    from app.models.events import BodyMotion, GameActivity, GameEvent, HeadGazeData
+    from app.models.ml import AIReport, BaselineData, DoctorCommand, DoctorNote, MLResult
+    from app.models.patient import Patient
+    from app.models.system import LearningStyleData
 
 
 class Session(Base):
@@ -25,15 +32,15 @@ class Session(Base):
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     ml_state: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    patient: Mapped["Patient"] = relationship(back_populates="sessions")
-    therapist: Mapped["Therapist"] = relationship(back_populates="sessions")
-    activities: Mapped[list["GameActivity"]] = relationship(back_populates="session")
-    game_events: Mapped[list["GameEvent"]] = relationship(back_populates="session")
-    body_motion: Mapped[list["BodyMotion"]] = relationship(back_populates="session")
-    head_gaze: Mapped[list["HeadGazeData"]] = relationship(back_populates="session")
-    ml_results: Mapped[list["MLResult"]] = relationship(back_populates="session")
-    baseline_data: Mapped[list["BaselineData"]] = relationship(back_populates="session")
-    doctor_commands: Mapped[list["DoctorCommand"]] = relationship(back_populates="session")
-    doctor_notes: Mapped[list["DoctorNote"]] = relationship(back_populates="session")
-    ai_reports: Mapped[list["AIReport"]] = relationship(back_populates="session")
-    learning_styles: Mapped[list["LearningStyleData"]] = relationship(back_populates="session")
+    patient: Mapped[Patient] = relationship(back_populates="sessions")
+    therapist: Mapped[Therapist] = relationship(back_populates="sessions")
+    activities: Mapped[list[GameActivity]] = relationship(back_populates="session")
+    game_events: Mapped[list[GameEvent]] = relationship(back_populates="session")
+    body_motion: Mapped[list[BodyMotion]] = relationship(back_populates="session")
+    head_gaze: Mapped[list[HeadGazeData]] = relationship(back_populates="session")
+    ml_results: Mapped[list[MLResult]] = relationship(back_populates="session")
+    baseline_data: Mapped[list[BaselineData]] = relationship(back_populates="session")
+    doctor_commands: Mapped[list[DoctorCommand]] = relationship(back_populates="session")
+    doctor_notes: Mapped[list[DoctorNote]] = relationship(back_populates="session")
+    ai_reports: Mapped[list[AIReport]] = relationship(back_populates="session")
+    learning_styles: Mapped[list[LearningStyleData]] = relationship(back_populates="session")

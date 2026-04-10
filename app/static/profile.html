@@ -32,7 +32,7 @@
 <script src="/static/js/core.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script>
-initPage();
+const pageReady = initPage();
 async function loadProfile() {
     const me = await API.get('/api/auth/me');
     document.getElementById('p-name').value = me.full_name || '';
@@ -46,7 +46,7 @@ async function saveProfile() {
     await API.put('/api/auth/me', payload);
     showToast('تم حفظ بيانات الطبيب', 'success');
 }
-loadProfile();
+if (pageReady) loadProfile();
 </script>
 </body>
 </html>
